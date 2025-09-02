@@ -1,6 +1,6 @@
-import pickle
 import dgl
 import torch
+import pickle
 import pysmiles
 import numpy as np
 import pkg_resources
@@ -29,8 +29,6 @@ class GraphDataset(dgl.data.DGLDataset):
                 self.parsed.append(i)
             except:
                 pass
-        print(f'{len(self.parsed)} SMILES were successfully parsed')
-        print(f'{len(self.smiles_list) - len(self.parsed)} SMILES failed to be parsed')
         if torch.cuda.is_available() and self.gpu:
             self.graphs = [graph.to('cuda:' + str(self.gpu)) for graph in self.graphs]
 
