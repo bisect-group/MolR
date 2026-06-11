@@ -3,15 +3,19 @@ import torch
 import pickle
 import pysmiles
 import numpy as np
-import pkg_resources
+from importlib.resources import files
 from MolR.model import GNN
 from dgl.dataloading import GraphDataLoader
 from MolR.data_processing import networkx_to_dgl
 
 
+def model_resource_path(model):
+    return str(files('MolR').joinpath('models', model)) + '/'
+
+
 class GraphDataset(dgl.data.DGLDataset):
     def __init__(self, model, smiles_list, gpu):
-        self.path = pkg_resources.resource_filename(__name__, f'models/{model}/')
+        self.path = model_resource_path(model)
         self.smiles_list = smiles_list
         self.gpu = gpu
         self.parsed = []
@@ -42,7 +46,7 @@ class MolEFeaturizer(object):
     def __init__(self, model='gcn_1024', gpu=0):
         self.model_name = model
         self.gpu = gpu
-        self.path_to_model = pkg_resources.resource_filename(__name__, f'models/{model}/')
+        self.path_to_model = model_resource_path(model)
 
         with open(self.path_to_model + 'hparams.pkl', 'rb') as f:
             hparams = pickle.load(f)
