@@ -1,9 +1,11 @@
-import sys
-import importlib.metadata
+from pathlib import Path
+
 from setuptools import setup, find_packages
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
+ROOT = Path(__file__).parent
+
+requirements = (ROOT / 'requirements.txt').read_text().splitlines()
+long_description = (ROOT / 'README.md').read_text()
 
 setup(
     name='MolR',
@@ -11,7 +13,7 @@ setup(
     author='Hongwei Wang, Weijiang Li, Xiaomeng Jin, Kyunghyun Cho, Heng Ji, Jiawei Han, Martin Burke',
     author_email='{hongweiw@illinois.edu',
     description='Chemical-Reaction-Aware Molecule Representation Learning',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/hwwang55/MolR',
     packages=find_packages(include=['MolR', 'MolR.*']),

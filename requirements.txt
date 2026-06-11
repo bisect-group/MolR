@@ -1,4 +1,4 @@
-pysmiles
+pysmiles @ git+https://github.com/bisect-group/pysmiles.git
 scikit-learn
 networkx
 matplotlib
