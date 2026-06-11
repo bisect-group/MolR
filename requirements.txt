@@ -4,3 +4,5 @@ networkx
 matplotlib
 openbabel-wheel
 scipy
+pandas
+pyarrow
