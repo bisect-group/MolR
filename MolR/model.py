@@ -1,7 +1,7 @@
 import math
 import torch
-from dgl.nn import GraphConv, GATConv, SAGEConv, SGConv, TAGConv
-from dgl.nn.pytorch.glob import SumPooling
+from MolR.graph import Graph
+from MolR.layers import GraphConv, GATConv, SAGEConv, SGConv, TAGConv, SumPooling
 from torch.nn import ModuleList
 from torch.nn.functional import one_hot
 
@@ -27,11 +27,9 @@ class GNN(torch.nn.Module):
                                                    activation=None if i == n_layer - 1 else torch.relu,
                                                    num_heads=num_heads))
                 elif gnn == 'sage':
-                    agg = 'pool'
                     self.gnn_layers.append(SAGEConv(in_feats=feature_len if i == 0 else dim,
                                                     out_feats=dim,
-                                                    activation=None if i == n_layer - 1 else torch.relu,
-                                                    aggregator_type=agg))
+                                                    activation=None if i == n_layer - 1 else torch.relu))
                 elif gnn == 'tag':
                     hops = 2
                     self.gnn_layers.append(TAGConv(in_feats=feature_len if i == 0 else dim,
@@ -46,8 +44,9 @@ class GNN(torch.nn.Module):
         self.factor = None
 
     def forward(self, graph):
-        feature = graph.ndata['feature']
-        h = one_hot(feature, num_classes=self.feature_len)
+        if not isinstance(graph, Graph):
+            graph = Graph.from_dgl(graph)
+        h = one_hot(graph.feature, num_classes=self.feature_len)
         h = torch.sum(h, dim=1, dtype=torch.float)
         for layer in self.gnn_layers:
             h = layer(graph, h)

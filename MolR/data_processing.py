@@ -4,9 +4,7 @@ import torch
 import pickle
 import pysmiles
 from collections import defaultdict
-
-
-attribute_names = ['element', 'charge', 'aromatic', 'hcount']
+from MolR.graph import attribute_names
 
 
 class SmilesDataset(dgl.data.DGLDataset):

@@ -1,4 +1,3 @@
-import dgl
 import torch
 import pickle
 import pysmiles
@@ -6,8 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 from importlib.resources import files
 from MolR.model import GNN
-from dgl.dataloading import GraphDataLoader
-from MolR.data_processing import networkx_to_dgl
+from MolR.graph import batch_graphs, networkx_to_graph
 
 
 def model_resource_path(model):
@@ -44,7 +42,7 @@ def smiles_to_graph(smiles, feature_encoder):
             infer_bare_bracket_hcount=True,
             ignore_invalid_ez=True,
         )
-        return networkx_to_dgl(raw_graph, feature_encoder), None
+        return networkx_to_graph(raw_graph, feature_encoder), None
     except Exception as exc:
         return None, f"parse failed: {type(exc).__name__}: {exc}"
 
@@ -58,35 +56,6 @@ def build_graph_result(index, smiles, feature_encoder):
         error=error,
     )
 
-
-class GraphDataset(dgl.data.DGLDataset):
-    def __init__(self, model, smiles_list, gpu):
-        self.path = model_resource_path(model)
-        self.smiles_list = smiles_list
-        self.gpu = gpu
-        self.parsed = []
-        self.graphs = []
-        self.failures = []
-        super().__init__(name='graph_dataset')
-
-    def process(self):
-        feature_encoder = load_feature_encoder(self.path.rstrip('/').split('/')[-1])
-        for i, smiles in enumerate(self.smiles_list):
-            result = build_graph_result(i, smiles, feature_encoder)
-            if result.graph is None:
-                self.failures.append(result)
-                continue
-            self.graphs.append(result.graph)
-            self.parsed.append(i)
-        device = cuda_device_for_gpu(self.gpu)
-        if device.type == 'cuda':
-            self.graphs = [graph.to(device) for graph in self.graphs]
-
-    def __getitem__(self, i):
-        return self.graphs[i]
-
-    def __len__(self):
-        return len(self.graphs)
 
 class MolEFeaturizer(object):
     def __init__(self, model='gcn_1024', gpu=0):
@@ -105,37 +74,27 @@ class MolEFeaturizer(object):
         self.mole = self.mole.to(device)
 
     def transform(self, smiles_list, batch_size=None):
-        data = GraphDataset(self.model_name, smiles_list, self.gpu)
-        dataloader = GraphDataLoader(data, batch_size=batch_size if batch_size else len(smiles_list))
+        encoder = load_feature_encoder(self.model_name)
+        results = [build_graph_result(i, smiles, encoder) for i, smiles in enumerate(smiles_list)]
+        parsed_results = [r for r in results if r.graph is not None]
         all_embeddings = np.zeros((len(smiles_list), self.dim), dtype=float)
         flags = np.zeros(len(smiles_list), dtype=bool)
-        res = []
-        with torch.no_grad():
-            self.mole.eval()
-            for graphs in dataloader:
-                if self.device.type == 'cuda':
-                    graphs = graphs.to(self.device)
-                graph_embeddings = self.mole(graphs)
-                res.append(graph_embeddings)
-            if res:
-                res = torch.cat(res, dim=0).cpu().numpy()
-                all_embeddings[data.parsed, :] = res
-                flags[data.parsed] = True
+        embeddings, parsed = self.transform_graphs(parsed_results, batch_size)
+        if parsed:
+            all_embeddings[parsed, :] = embeddings
+            flags[parsed] = True
         return all_embeddings, flags
 
     def transform_graphs(self, graph_records, batch_size=None):
         graphs = [record.graph for record in graph_records]
         parsed = [record.index for record in graph_records]
-        if self.device.type == 'cuda':
-            graphs = [graph.to(self.device) for graph in graphs]
-        dataloader = GraphDataLoader(graphs, batch_size=batch_size if batch_size else len(graphs))
+        batch_size = batch_size or len(graphs)
         embeddings = []
         with torch.no_grad():
             self.mole.eval()
-            for graphs_batch in dataloader:
-                if self.device.type == 'cuda':
-                    graphs_batch = graphs_batch.to(self.device)
-                embeddings.append(self.mole(graphs_batch))
+            for i in range(0, len(graphs), batch_size):
+                batch = batch_graphs(graphs[i:i + batch_size]).to(self.device)
+                embeddings.append(self.mole(batch))
         if not embeddings:
             return np.zeros((0, self.dim), dtype=float), []
         return torch.cat(embeddings, dim=0).cpu().numpy(), parsed
